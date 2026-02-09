@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   const pvId = req.nextUrl.searchParams.get("puntoVenditaId");
   const limit = parseInt(req.nextUrl.searchParams.get("limit") || "50");

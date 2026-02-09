@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const puntiVendita = await prisma.puntoVendita.findMany({
     orderBy: { createdAt: "desc" },
