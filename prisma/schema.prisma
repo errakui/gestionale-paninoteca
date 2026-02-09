@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Punto Vendita (sede / paninoteca) ─────────────────────────
+model PuntoVendita {
+  id        String   @id @default(cuid())
+  nome      String
+  indirizzo String?
+  telefono  String?
+  attivo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  giacenze   Giacenza[]
+  movimenti  Movimento[]
+  vendite    Vendita[]
+
+  @@map("punti_vendita")
+}
+
+// ─── Prodotto / Ingrediente ────────────────────────────────────
+enum UnitaMisura {
+  KG
+  GRAMMI
+  LITRI
+  PEZZI
+}
+
+enum Categoria {
+  PANE
+  CARNE
+  FORMAGGI
+  SALSE
+  VERDURE
+  BEVANDE
+  ALTRO
+}
+
+model Prodotto {
+  id            String      @id @default(cuid())
+  nome          String
+  categoria     Categoria   @default(ALTRO)
+  unitaMisura   UnitaMisura @default(PEZZI)
+  sogliaMinima  Float       @default(0)
+  costoMedio    Float       @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  giacenze              Giacenza[]
+  movimenti             Movimento[]
+  ricettaIngredienti    RicettaIngrediente[]
+
+  @@map("prodotti")
+}
+
+// ─── Giacenza (stock per prodotto per punto vendita) ───────────
+model Giacenza {
+  id             String       @id @default(cuid())
+  quantita       Float        @default(0)
+  puntoVenditaId String
+  prodottoId     String
+  updatedAt      DateTime     @updatedAt
+
+  puntoVendita   PuntoVendita @relation(fields: [puntoVenditaId], references: [id], onDelete: Cascade)
+  prodotto       Prodotto     @relation(fields: [prodottoId], references: [id], onDelete: Cascade)
+
+  @@unique([puntoVenditaId, prodottoId])
+  @@map("giacenze")
+}
+
+// ─── Movimento (carico / scarico) ──────────────────────────────
+enum TipoMovimento {
+  CARICO
+  SCARICO
+}
+
+model Movimento {
+  id             String        @id @default(cuid())
+  tipo           TipoMovimento
+  quantita       Float
+  note           String?
+  createdAt      DateTime      @default(now())
+
+  puntoVenditaId String
+  prodottoId     String
+  puntoVendita   PuntoVendita  @relation(fields: [puntoVenditaId], references: [id], onDelete: Cascade)
+  prodotto       Prodotto      @relation(fields: [prodottoId], references: [id], onDelete: Cascade)
+
+  @@map("movimenti")
+}
+
+// ─── Ricetta (panino / prodotto finito) ────────────────────────
+model Ricetta {
+  id          String   @id @default(cuid())
+  nome        String
+  descrizione String?
+  prezzo      Float    @default(0)
+  attiva      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ingredienti RicettaIngrediente[]
+  vendite     Vendita[]
+
+  @@map("ricette")
+}
+
+model RicettaIngrediente {
+  id         String  @id @default(cuid())
+  quantita   Float
+  ricettaId  String
+  prodottoId String
+
+  ricetta    Ricetta  @relation(fields: [ricettaId], references: [id], onDelete: Cascade)
+  prodotto   Prodotto @relation(fields: [prodottoId], references: [id], onDelete: Cascade)
+
+  @@unique([ricettaId, prodottoId])
+  @@map("ricetta_ingredienti")
+}
+
+// ─── Vendita ───────────────────────────────────────────────────
+model Vendita {
+  id             String       @id @default(cuid())
+  quantita       Int          @default(1)
+  data           DateTime     @default(now())
+  createdAt      DateTime     @default(now())
+
+  ricettaId      String
+  puntoVenditaId String
+  ricetta        Ricetta      @relation(fields: [ricettaId], references: [id], onDelete: Cascade)
+  puntoVendita   PuntoVendita @relation(fields: [puntoVenditaId], references: [id], onDelete: Cascade)
+
+  @@map("vendite")
+}

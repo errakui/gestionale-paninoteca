@@ -1,36 +1,102 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Gestionale Paninoteca - MVP
 
-## Getting Started
+Software di gestione magazzino multi-punto vendita per paninoteche.
 
-First, run the development server:
+## Funzionalità
+
+- **Anagrafica Prodotti/Ingredienti** — categorie, unità di misura, soglie di riordino, costi medi
+- **Multi Punto Vendita** — ogni sede separata ma confrontabile
+- **Magazzino** — giacenze in tempo reale, carichi/scarichi, storico movimenti
+- **Ricette/Panini** — composizione ingredienti, calcolo food cost, margine
+- **Vendite** — registrazione vendite con scarico automatico del magazzino
+- **Dashboard** — panoramica, prodotti sotto soglia, confronto sedi, top vendite
+
+## Tech Stack
+
+- **Next.js 14** (App Router)
+- **TypeScript**
+- **TailwindCSS 4**
+- **Prisma ORM** + PostgreSQL
+- **Vitest** per i test
+
+## Setup Locale
+
+### 1. Database PostgreSQL
+
+Crea un database PostgreSQL gratuito su [Neon](https://neon.tech):
+1. Registrati su neon.tech
+2. Crea un nuovo progetto
+3. Copia la connection string
+
+### 2. Configurazione
+
+```bash
+# Clona e installa
+npm install
+
+# Configura il database
+cp .env.example .env
+# Modifica .env con la tua DATABASE_URL
+
+# Genera client Prisma
+npx prisma generate
+
+# Crea le tabelle
+npx prisma db push
+
+# (Opzionale) Popola con dati di esempio
+npx tsx prisma/seed.ts
+```
+
+### 3. Avvio
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Apri [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Test
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm test
+```
 
-## Learn More
+## Deploy su Vercel
 
-To learn more about Next.js, take a look at the following resources:
+1. Pusha il codice su GitHub
+2. Importa il progetto su [vercel.com](https://vercel.com)
+3. Aggiungi la variabile d'ambiente `DATABASE_URL` nelle impostazioni del progetto
+4. Vercel builderà e deployerà automaticamente
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Struttura
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+src/
+├── app/
+│   ├── api/              # API Routes (CRUD)
+│   │   ├── dashboard/
+│   │   ├── magazzino/
+│   │   ├── prodotti/
+│   │   ├── punti-vendita/
+│   │   ├── ricette/
+│   │   └── vendite/
+│   ├── dashboard/        # Dashboard page
+│   ├── magazzino/        # Warehouse page
+│   ├── prodotti/         # Products page
+│   ├── punti-vendita/    # Locations page
+│   ├── ricette/          # Recipes page
+│   └── vendite/          # Sales page
+├── components/           # UI Components
+├── lib/                  # Prisma client
+└── __tests__/            # Test suite
+```
 
-## Deploy on Vercel
+## Evoluzioni Future
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Integrazione POS
+- Ordini automatici ai fornitori
+- App mobile per carichi/scarichi
+- Controllo food cost avanzato
+- Sistema ruoli (titolare / responsabile)
+- Accesso dedicato per affiliati
