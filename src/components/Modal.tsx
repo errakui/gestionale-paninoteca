@@ -16,10 +16,10 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-foreground">{title}</h2>
+          <h2 className="text-lg font-bold text-stone-900">{title}</h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-muted hover:bg-surface-alt hover:text-foreground"
+            className="rounded-lg p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
           >
             <X size={18} />
           </button>

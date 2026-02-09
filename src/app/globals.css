@@ -1,22 +1,6 @@
-@import "tailwindcss";
-
-@theme inline {
-  --color-primary: #D97706;
-  --color-primary-light: #F59E0B;
-  --color-primary-dark: #B45309;
-  --color-sidebar: #1C1917;
-  --color-sidebar-hover: #292524;
-  --color-surface: #FFFFFF;
-  --color-surface-alt: #F5F5F4;
-  --color-background: #FAFAF9;
-  --color-foreground: #1C1917;
-  --color-muted: #78716C;
-  --color-border: #E7E5E4;
-  --color-success: #22C55E;
-  --color-danger: #EF4444;
-  --color-warning: #F59E0B;
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 * {
   box-sizing: border-box;
@@ -25,9 +9,8 @@
 }
 
 body {
-  background: var(--color-background);
-  color: var(--color-foreground);
-  font-family: var(--font-sans);
+  background: #FAFAF9;
+  color: #1C1917;
 }
 
 /* Scrollbar */
@@ -40,7 +23,7 @@ body {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.4);
+  background: rgba(0,0,0,0.5);
   z-index: 50;
   display: flex;
   align-items: center;
@@ -53,9 +36,10 @@ body {
   border-radius: 12px;
   padding: 24px;
   max-width: 560px;
-  width: 90%;
+  width: 92%;
   max-height: 85vh;
   overflow-y: auto;
+  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
   animation: slideUp 0.2s ease-out;
 }
 
@@ -67,4 +51,19 @@ body {
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Toast notification */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 60;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: white;
+  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.2);
+  animation: slideUp 0.25s ease-out;
 }
