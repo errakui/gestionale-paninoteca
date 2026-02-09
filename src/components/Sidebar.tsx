@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -52,14 +53,15 @@ export default function Sidebar() {
         }`}
       >
         {/* Logo */}
-        <div className="flex h-16 items-center gap-3 border-b border-white/10 px-6">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary font-bold text-white text-lg">
-            P
-          </div>
-          <div>
-            <h1 className="text-sm font-bold leading-tight">Gestionale</h1>
-            <p className="text-xs text-white/50">Paninoteca</p>
-          </div>
+        <div className="flex h-20 items-center justify-center border-b border-white/10 px-4">
+          <Image
+            src="/logo.png"
+            alt="Daddy's Burger Logo"
+            width={160}
+            height={44}
+            className="brightness-0 invert"
+            priority
+          />
         </div>
 
         {/* Nav */}

@@ -3,8 +3,8 @@ import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 
 export const metadata: Metadata = {
-  title: "Gestionale Paninoteca",
-  description: "Software gestione magazzino multi-punto vendita per paninoteche",
+  title: "Daddy's Burger - Gestionale",
+  description: "Software gestione magazzino multi-punto vendita per Daddy's Burger",
 };
 
 export default function RootLayout({
