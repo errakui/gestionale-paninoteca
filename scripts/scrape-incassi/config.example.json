@@ -1,0 +1,20 @@
+{
+  "portale": {
+    "loginUrl": "https://esempio-portale.it/login",
+    "incassiUrl": "https://esempio-portale.it/area-riservata/incassi-giornalieri",
+    "selectors": {
+      "username": "input[name='email'], #username, #email",
+      "password": "input[name='password'], #password",
+      "submit": "button[type='submit'], input[type='submit'], .btn-login, button:has-text('Accedi')",
+      "rows": "table.incassi tbody tr, table tbody tr, .riga-incasso, [data-row]",
+      "data": "td:nth-child(1), .data, .date",
+      "importo": "td:nth-child(2), .importo, .amount, td:nth-child(2)"
+    },
+    "waitAfterLoginMs": 2000,
+    "waitForTableMs": 3000
+  },
+  "gestionale": {
+    "apiUrl": "https://gestionale-paninoteca.vercel.app",
+    "puntoVenditaId": ""
+  }
+}

@@ -1,0 +1,38 @@
+# Sync incassi da admin.velocissimo.app ogni 6 minuti.
+# Su Vercel Chrome non è disponibile (libnss3 ecc.); qui su Ubuntu sì.
+#
+# Aggiungi i secrets nel repo: GitHub → Settings → Secrets and variables → Actions:
+#   GESTIONALE_URL       = https://gestionale-paninoteca.vercel.app
+#   VELOCISSIMO_EMAIL    = (email portale)
+#   VELOCISSIMO_PASSWORD = (password portale)
+#   INCASSI_API_KEY      = (stessa chiave impostata su Vercel)
+
+name: Sync Velocissimo incassi
+
+on:
+  schedule:
+    - cron: "*/6 * * * *"   # ogni 6 minuti
+  workflow_dispatch:        # esecuzione manuale da Actions tab
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Puppeteer
+        run: npm install puppeteer
+
+      - name: Sync incassi
+        env:
+          GESTIONALE_URL: ${{ secrets.GESTIONALE_URL }}
+          VELOCISSIMO_EMAIL: ${{ secrets.VELOCISSIMO_EMAIL }}
+          VELOCISSIMO_PASSWORD: ${{ secrets.VELOCISSIMO_PASSWORD }}
+          INCASSI_API_KEY: ${{ secrets.INCASSI_API_KEY }}
+          VELOCISSIMO_SEDE: ${{ secrets.VELOCISSIMO_SEDE }}
+        run: node scripts/sync-velocissimo-github-actions.mjs

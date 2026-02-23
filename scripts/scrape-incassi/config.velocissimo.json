@@ -1,0 +1,21 @@
+{
+  "portale": {
+    "loginUrl": "https://admin.velocissimo.app",
+    "incassiUrl": "https://admin.velocissimo.app",
+    "sorrentoMenuText": "Sorrento",
+    "selectors": {
+      "username": "input[type='email'], input[name='email'], #email",
+      "password": "input[type='password'], input[name='password'], #password",
+      "submit": "button[type='submit'], input[type='submit'], button:has-text('Accedi'), .btn-primary, button",
+      "rows": "table tbody tr, .table tbody tr, [data-testid='incassi-row']",
+      "data": "td:nth-child(1), .date, .data",
+      "importo": "td:nth-child(2), .importo, .amount, td:nth-child(2)"
+    },
+    "waitAfterLoginMs": 3000,
+    "waitForTableMs": 4000
+  },
+  "gestionale": {
+    "apiUrl": "https://gestionale-paninoteca.vercel.app",
+    "puntoVenditaId": ""
+  }
+}

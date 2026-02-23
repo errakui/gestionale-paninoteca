@@ -1,0 +1,15 @@
+{
+  "name": "scrape-incassi",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "scrape": "node scrape.js",
+    "scrape:headed": "HEADLESS=false node scrape.js",
+    "server": "node server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "puppeteer": "^23.0.0"
+  }
+}
