@@ -235,6 +235,8 @@ async function main() {
 
   try {
     const page = await browser.newPage();
+    let metricsTodayForFallback = null;
+
     await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36");
     log("Pagina admin.velocissimo.app...");
     await page.goto("https://admin.velocissimo.app", { waitUntil: "networkidle2", timeout: 25000 });
@@ -369,6 +371,7 @@ async function main() {
       const yesterday = dayStrings(-1);
       const metricsToday = await fetchMetricsByDay(today);
       const metricsYesterday = await fetchMetricsByDay(yesterday);
+      metricsTodayForFallback = metricsToday;
 
       const selectedOrigins = ORIGINE_TEXT ? [ORIGINE_TEXT] : ["Tutte le origini"];
       const selectedTypes = TIPO_TEXT ? [TIPO_TEXT] : ["Tutti i tipi"];
@@ -663,6 +666,22 @@ async function main() {
         incassi.push({ data, importo, puntoVenditaId });
       }
     }
+
+    // Fallback: se tabella vuota ma KPI presente, salva il totale venduto odierno.
+    log("KPI Totale venduto per fallback:", JSON.stringify(metricsTodayForFallback?.["Totale venduto"] ?? null));
+    if (incassi.length === 0 && metricsTodayForFallback?.["Totale venduto"]?.current) {
+      const fallbackImporto = parseMetricToAmount(metricsTodayForFallback["Totale venduto"].current);
+      if (!isNaN(fallbackImporto) && fallbackImporto > 0) {
+        incassi.push({
+          data: dayStrings(0).date,
+          importo: fallbackImporto,
+          puntoVenditaId,
+          note: "Fallback KPI dashboard (Totale venduto)",
+        });
+        log("Fallback incasso da KPI applicato:", fallbackImporto);
+      }
+    }
+
     log("Incassi validi parsati:", incassi.length);
     if (STOP_BEFORE_POST) {
       log("STOP_BEFORE_POST=1: test completato fino a parsing tabella, nessun invio API");
