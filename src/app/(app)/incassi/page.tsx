@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import { Wallet, FileSpreadsheet } from "lucide-react";
 
@@ -60,45 +59,40 @@ export default function IncassiPage() {
   const [originsKeySel, setOriginsKeySel] = useState("");
   const [typesKeySel, setTypesKeySel] = useState("");
   const [loading, setLoading] = useState(true);
-  const [cronLog, setCronLog] = useState<{ runAt: string; status: string; message: string | null } | null>(null);
-  const [testRun, setTestRun] = useState<{ ok: boolean; message: string; steps?: { step: string; ok: boolean; detail?: string; screenshot?: string }[] } | null>(null);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
   const [draftFrom, setDraftFrom] = useState("");
   const [draftTo, setDraftTo] = useState("");
   const [draftStore, setDraftStore] = useState("");
   const [draftOrigins, setDraftOrigins] = useState("");
   const [draftTypes, setDraftTypes] = useState("");
+  const autoSyncKeyRef = useRef<string>("");
 
-  const runSyncNow = async () => {
-    setTestRun(null);
+  const runSyncNow = async (silent = false) => {
     setTestLoading(true);
     try {
       const r = await fetch("/api/cron/sync-velocissimo", {
         credentials: "include",
-        headers: { "x-want-screenshots": "1" },
       });
       const data = await r.json().catch(() => ({}));
-      const steps = Array.isArray(data.steps) ? data.steps : undefined;
       if (r.ok) {
-        setTestRun({
-          ok: true,
-          message: data.queued
+        setSyncMessage(
+          data.queued
             ? (data.message || "Workflow GitHub avviato")
             : data.count !== undefined
               ? `${data.count} incassi caricati`
-              : (data.message || "Ok"),
-          steps,
-        });
-        fetch("/api/velocissimo/cron-log").then((x) => x.json()).then(setCronLog).catch(() => {});
+              : (data.message || "Sincronizzazione avviata")
+        );
         loadIncassi();
         loadAnalytics();
       } else {
-        setTestRun({ ok: false, message: data.error || "Errore " + r.status, steps });
+        setSyncMessage(data.error || `Errore sync ${r.status}`);
       }
     } catch (e) {
-      setTestRun({ ok: false, message: String(e) });
+      setSyncMessage(String(e));
     } finally {
       setTestLoading(false);
+      if (!silent) setTimeout(() => setSyncMessage(null), 5000);
     }
   };
 
@@ -141,13 +135,6 @@ export default function IncassiPage() {
     loadAnalytics();
   }, [pvSel, from, to, storeValueSel, originsKeySel, typesKeySel]);
 
-  useEffect(() => {
-    fetch("/api/velocissimo/cron-log")
-      .then((r) => r.json())
-      .then(setCronLog)
-      .catch(() => setCronLog(null));
-  }, []);
-
   const totale = incassi.reduce((s, i) => s + i.importo, 0);
   const perMese: Record<string, number> = {};
   incassi.forEach((i) => {
@@ -165,6 +152,19 @@ export default function IncassiPage() {
         ).values()
       )
     : [];
+  const parseMoney = (v: string | null | undefined) => {
+    if (!v) return 0;
+    const n = Number(v.replace(/[€\s]/g, "").replace(/\./g, "").replace(",", "."));
+    return Number.isFinite(n) ? n : 0;
+  };
+  const aggregatedKpi = useMemo(() => {
+    if (analyticsRows.length === 0) return null;
+    const totals = KPI_ORDER.reduce<Record<string, number>>((acc, k) => {
+      acc[k] = analyticsRows.reduce((sum, r) => sum + parseMoney(r.metrics?.[k]?.current), 0);
+      return acc;
+    }, {});
+    return totals;
+  }, [analyticsRows]);
   const storeOptions = Array.from(
     new Map<string, SelectOption>([
       ...DEFAULT_VELOCISSIMO_STORES.map((s): [string, SelectOption] => [s.value, s]),
@@ -206,15 +206,24 @@ export default function IncassiPage() {
     setDraftFrom("2026-02-01");
     setDraftTo("2026-02-24");
   };
+  useEffect(() => {
+    const key = [from, to, storeValueSel, originsKeySel, typesKeySel].join("|");
+    if (!key || key === autoSyncKeyRef.current) return;
+    if (loading) return;
+    if (analyticsRows.length > 0 || incassi.length > 0) return;
+    autoSyncKeyRef.current = key;
+    setSyncMessage("Nessun dato nel DB per questo filtro: avvio scraping cloud automatico...");
+    runSyncNow(true);
+  }, [from, to, storeValueSel, originsKeySel, typesKeySel, loading, analyticsRows.length, incassi.length]);
 
   return (
     <>
       <PageHeader
         title="Incassi esterni (Velocissimo)"
-        description="Dati da scraping headless: cache KPI dashboard + incassi giornalieri salvati in DB. Aggiornamento automatico ogni 6 minuti."
+        description="Dati KPI e incassi salvati su DB Neon. Se mancano dati sul filtro selezionato, il sistema avvia lo scraping cloud automaticamente."
         action={
           <button
-            onClick={runSyncNow}
+            onClick={() => runSyncNow()}
             disabled={testLoading}
             className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
           >
@@ -306,47 +315,9 @@ export default function IncassiPage() {
       <p className="mb-4 text-sm text-stone-500">
         Negozio/Origine/Tipo sono filtri reali Velocissimo. Se non vedi righe, metti "Destinazione DB interna: tutte le sedi" e poi premi Cerca.
       </p>
-
-      {testRun && (
-        <div className={`mb-4 rounded-lg border p-3 ${testRun.ok ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}>
-          <p className="text-sm font-medium text-stone-700">Risultato &quot;Esegui sync ora&quot;</p>
-          <p className={`text-sm font-medium ${testRun.ok ? "text-green-700" : "text-red-700"}`}>{testRun.message}</p>
-          {testRun.steps && testRun.steps.length > 0 && (
-            <div className="mt-3 border-t border-stone-200 pt-2">
-              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-stone-500">Passaggi eseguiti</p>
-              <ol className="list-decimal space-y-3 pl-5 text-sm">
-                {testRun.steps.map((s, i) => (
-                  <li key={i} className={s.ok ? "text-stone-700" : "text-red-700 font-medium"}>
-                    {s.step}
-                    {s.detail != null && <span className="text-stone-600"> — {s.detail}</span>}
-                    {s.ok ? " ✓" : " ✗"}
-                    {s.screenshot && (
-                      <div className="mt-1.5">
-                        <img
-                          src={`data:image/jpeg;base64,${s.screenshot}`}
-                          alt={s.step}
-                          className="max-w-full rounded border border-stone-200"
-                          style={{ maxHeight: "320px" }}
-                        />
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
-        </div>
-      )}
-
-      {cronLog && (
-        <div className={`mb-4 rounded-lg border p-3 ${cronLog.status === "OK" ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}>
-          <p className="text-sm font-medium text-stone-700">Ultimo run cron</p>
-          <p className="text-sm text-stone-800">
-            {new Date(cronLog.runAt).toLocaleString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-            {" — "}
-            {cronLog.status === "OK" ? <span className="text-green-700">{cronLog.message}</span> : <span className="text-red-700">{cronLog.message}</span>}
-          </p>
-          <Link href="/integrazioni/velocissimo" className="mt-1 inline-block text-xs text-amber-600 hover:underline">Dettaglio e variabili →</Link>
+      {syncMessage && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          {syncMessage}
         </div>
       )}
 
@@ -368,6 +339,23 @@ export default function IncassiPage() {
                     <p className="mt-1 text-xs text-stone-500">Totale venduto</p>
                     <p className="text-lg font-bold text-stone-900">{row.metrics?.["Totale venduto"]?.current ?? "N/D"}</p>
                     <p className="text-xs text-stone-500">Ordini: {row.metrics?.["Numero ordini"]?.current ?? "N/D"}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {aggregatedKpi && (
+            <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm font-semibold text-emerald-900">
+                KPI aggregati sul periodo selezionato (somma giorno per giorno)
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {KPI_ORDER.map((k) => (
+                  <div key={k} className="rounded-lg border border-emerald-100 bg-white p-3">
+                    <p className="text-xs text-stone-500">{k}</p>
+                    <p className="text-lg font-bold text-stone-900">
+                      {aggregatedKpi[k].toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
                   </div>
                 ))}
               </div>

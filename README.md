@@ -1,102 +1,132 @@
-# Gestionale Paninoteca - MVP
+# Gestionale Paninoteca
 
-Software di gestione magazzino multi-punto vendita per paninoteche.
+Gestionale web per punti vendita multipli con moduli operativi (magazzino, ricette, vendite, ordini, HACCP) e integrazione scraping Velocissimo.
 
-## Funzionalità
+## Funzionalita principali
 
-- **Anagrafica Prodotti/Ingredienti** — categorie, unità di misura, soglie di riordino, costi medi
-- **Multi Punto Vendita** — ogni sede separata ma confrontabile
-- **Magazzino** — giacenze in tempo reale, carichi/scarichi, storico movimenti
-- **Ricette/Panini** — composizione ingredienti, calcolo food cost, margine
-- **Vendite** — registrazione vendite con scarico automatico del magazzino
-- **Dashboard** — panoramica, prodotti sotto soglia, confronto sedi, top vendite
+- Magazzino multi-sede (giacenze, carichi/scarichi, movimenti)
+- Ricette con food cost
+- Vendite e report
+- Incassi esterni (Velocissimo) con:
+  - salvataggio giornaliero su DB
+  - cache KPI dashboard per filtri (negozio/origine/tipo)
+  - storico KPI giorno per giorno
 
-## Tech Stack
+## Stack
 
-- **Next.js 14** (App Router)
-- **TypeScript**
-- **TailwindCSS 4**
-- **Prisma ORM** + PostgreSQL
-- **Vitest** per i test
+- Next.js 14 (App Router)
+- TypeScript
+- TailwindCSS
+- Prisma + PostgreSQL (Neon)
+- GitHub Actions per scraping browser (Puppeteer)
 
-## Setup Locale
+## Architettura sync Velocissimo
 
-### 1. Database PostgreSQL
+Importante: Chrome/Puppeteer non gira in modo affidabile dentro Vercel runtime per questo progetto.
 
-Crea un database PostgreSQL gratuito su [Neon](https://neon.tech):
-1. Registrati su neon.tech
-2. Crea un nuovo progetto
-3. Copia la connection string
+- **Vercel**: UI + API + database
+- **GitHub Actions**: esecuzione scraping headless ogni 6 minuti
 
-### 2. Configurazione
+Flusso:
+1. Workflow GitHub apre `admin.velocissimo.app`
+2. Applica filtri (negozio/origine/tipo)
+3. Legge KPI e dati disponibili
+4. Salva su API del gestionale:
+   - `POST /api/velocissimo/analytics-cache` (KPI)
+   - `POST /api/incassi` (incassi)
+
+## Setup locale
 
 ```bash
-# Clona e installa
 npm install
-
-# Configura il database
-cp .env.example .env
-# Modifica .env con la tua DATABASE_URL
-
-# Genera client Prisma
 npx prisma generate
-
-# Crea le tabelle
 npx prisma db push
-
-# (Opzionale) Popola con dati di esempio
-npx tsx prisma/seed.ts
-```
-
-### 3. Avvio
-
-```bash
 npm run dev
 ```
 
-Apri [http://localhost:3000](http://localhost:3000)
+App su `http://localhost:3000`.
 
-## Test
+## Variabili ambiente
 
+### Vercel (produzione)
+
+Obbligatorie:
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `INCASSI_API_KEY`
+- `VELOCISSIMO_EMAIL`
+- `VELOCISSIMO_PASSWORD`
+
+Per trigger workflow GitHub dal pulsante "Esegui sync ora":
+- `GITHUB_SYNC_TOKEN` (token con permesso actions/workflow dispatch sul repo)
+- `GITHUB_SYNC_REPO` (es. `owner/repo`)
+- `GITHUB_SYNC_WORKFLOW` (default `sync-velocissimo.yml`)
+- `GITHUB_SYNC_REF` (default `main`)
+
+### GitHub Secrets (workflow)
+
+- `GESTIONALE_URL` (es. `https://gestionale-paninoteca.vercel.app`)
+- `VELOCISSIMO_EMAIL`
+- `VELOCISSIMO_PASSWORD`
+- `INCASSI_API_KEY`
+- opzionali:
+  - `VELOCISSIMO_SEDE`
+  - `VELOCISSIMO_STORE_VALUE`
+  - `VELOCISSIMO_ORIGINE_TEXT`
+  - `VELOCISSIMO_TIPO_TEXT`
+  - `DEBUG`
+
+## Workflow GitHub
+
+File: `.github/workflows/sync-velocissimo.yml`
+
+- schedule: `*/6 * * * *` (ogni 6 minuti)
+- trigger manuale da tab Actions
+
+Verifica run:
 ```bash
-npm test
+gh run list --workflow "sync-velocissimo.yml"
+gh run view <run-id> --log-failed
 ```
 
-## Deploy su Vercel
+## Incassi e KPI in pagina
 
-1. Pusha il codice su GitHub
-2. Importa il progetto su [vercel.com](https://vercel.com)
-3. Aggiungi la variabile d'ambiente `DATABASE_URL` nelle impostazioni del progetto
-4. Vercel builderà e deployerà automaticamente
+Pagina cliente: `Incassi esterni`
 
-## Struttura
+- filtri operativi:
+  - periodo (da/a)
+  - negozio Velocissimo
+  - origine
+  - tipo
+- KPI aggregati sul periodo (somma giorno per giorno)
+- storico KPI da cache
 
-```
-src/
-├── app/
-│   ├── api/              # API Routes (CRUD)
-│   │   ├── dashboard/
-│   │   ├── magazzino/
-│   │   ├── prodotti/
-│   │   ├── punti-vendita/
-│   │   ├── ricette/
-│   │   └── vendite/
-│   ├── dashboard/        # Dashboard page
-│   ├── magazzino/        # Warehouse page
-│   ├── prodotti/         # Products page
-│   ├── punti-vendita/    # Locations page
-│   ├── ricette/          # Recipes page
-│   └── vendite/          # Sales page
-├── components/           # UI Components
-├── lib/                  # Prisma client
-└── __tests__/            # Test suite
+Dettagli tecnici/dev (log run, variabili, troubleshooting): solo in `Integrazioni -> Velocissimo`.
+
+## Backfill storico (es. febbraio)
+
+Esempio:
+```bash
+HEADLESS=true \
+BACKFILL_FROM=2026-02-01 \
+BACKFILL_TO=2026-02-24 \
+BACKFILL_WRITE_INCASSI=1 \
+node scripts/sync-velocissimo-github-actions.mjs
 ```
 
-## Evoluzioni Future
+Questo salva KPI giorno per giorno; se richiesto, salva anche incassi giornalieri nel DB.
 
-- Integrazione POS
-- Ordini automatici ai fornitori
-- App mobile per carichi/scarichi
-- Controllo food cost avanzato
-- Sistema ruoli (titolare / responsabile)
-- Accesso dedicato per affiliati
+## Troubleshooting rapido
+
+- Errore `Mancano GITHUB_SYNC_TOKEN o GITHUB_SYNC_REPO`:
+  - aggiungere env su Vercel e ridistribuire
+- Workflow GitHub fallisce con env vuote:
+  - aggiungere GitHub Secrets mancanti
+- In pagina non vedi dati:
+  - controllare filtri attivi (sede interna/negozio/date)
+  - verificare run GitHub e cron log integrazione
+  - verificare righe su Neon (`incasso_giornaliero`, `velocissimo_analytics_cache`)
+
+## Licenza
+
+Uso interno progetto.
