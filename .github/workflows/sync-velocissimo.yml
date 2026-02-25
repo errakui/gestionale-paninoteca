@@ -35,4 +35,8 @@ jobs:
           VELOCISSIMO_PASSWORD: ${{ secrets.VELOCISSIMO_PASSWORD }}
           INCASSI_API_KEY: ${{ secrets.INCASSI_API_KEY }}
           VELOCISSIMO_SEDE: ${{ secrets.VELOCISSIMO_SEDE }}
+          VELOCISSIMO_STORE_VALUE: ${{ secrets.VELOCISSIMO_STORE_VALUE }}
+          VELOCISSIMO_ORIGINE_TEXT: ${{ secrets.VELOCISSIMO_ORIGINE_TEXT }}
+          VELOCISSIMO_TIPO_TEXT: ${{ secrets.VELOCISSIMO_TIPO_TEXT }}
+          DEBUG: ${{ secrets.DEBUG }}
         run: node scripts/sync-velocissimo-github-actions.mjs

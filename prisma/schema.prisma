@@ -39,10 +39,19 @@ model PuntoVendita {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  giacenze   Giacenza[]
-  movimenti  Movimento[]
-  vendite    Vendita[]
-  utenti     Utente[]
+  giacenze          Giacenza[]
+  movimenti         Movimento[]
+  vendite           Vendita[]
+  utenti            Utente[]
+  ordini            OrdineFornitore[]
+  bolleOrigine      BollaTrasferimento[] @relation("BollaOrigine")
+  bolleDestinazione BollaTrasferimento[] @relation("BollaDestinazione")
+  haccpRintracciabilita HaccpRintracciabilita[]
+  haccpTemperature      HaccpTemperatura[]
+  haccpIgiene           HaccpIgiene[]
+  ispezioni             IspezionePulizia[]
+  incassiGiornalieri    IncassoGiornaliero[]
+  syncVelocissimo       SyncVelocissimo?
 
   @@map("punti_vendita")
 }
@@ -62,6 +71,8 @@ enum Categoria {
   SALSE
   VERDURE
   BEVANDE
+  LATTICINI
+  CONTORNI
   ALTRO
 }
 
@@ -78,6 +89,10 @@ model Prodotto {
   giacenze              Giacenza[]
   movimenti             Movimento[]
   ricettaIngredienti    RicettaIngrediente[]
+  ordineItems           OrdineItem[]
+  bollaItems            BollaItem[]
+  fornitoreId           String?
+  fornitore             Fornitore?   @relation(fields: [fornitoreId], references: [id])
 
   @@map("prodotti")
 }
@@ -120,13 +135,18 @@ model Movimento {
 
 // ─── Ricetta (panino / prodotto finito) ────────────────────────
 model Ricetta {
-  id          String   @id @default(cuid())
-  nome        String
-  descrizione String?
-  prezzo      Float    @default(0)
-  attiva      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(cuid())
+  nome           String
+  descrizione    String?
+  prezzo         Float    @default(0)
+  immagine       String?
+  foodCost       Float    @default(0)
+  categoriaMenu  String?
+  gruppo         String?
+  negozio        String?
+  attiva         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   ingredienti RicettaIngrediente[]
   vendite     Vendita[]
@@ -160,4 +180,320 @@ model Vendita {
   puntoVendita   PuntoVendita @relation(fields: [puntoVenditaId], references: [id], onDelete: Cascade)
 
   @@map("vendite")
+}
+
+// ─── Incasso giornaliero (portale esterno / import / scraping) ─
+enum FonteIncasso {
+  MANUALE   // Inserimento a mano
+  IMPORT    // Caricamento CSV
+  SCRAPING  // Import da script esterno
+}
+
+model IncassoGiornaliero {
+  id             String        @id @default(cuid())
+  data           DateTime      // giorno di riferimento
+  importo        Float         // euro
+  fonte          FonteIncasso  @default(MANUALE)
+  note           String?       // es. "Portale X - chiusura cassa"
+  createdAt      DateTime      @default(now())
+
+  puntoVenditaId String
+  puntoVendita   PuntoVendita  @relation(fields: [puntoVenditaId], references: [id], onDelete: Cascade)
+
+  @@unique([data, puntoVenditaId]) // un incasso per giorno per sede
+  @@map("incassi_giornalieri")
+}
+
+// Ultimo sync incassi da Velocissimo (per pagina dedicata)
+model SyncVelocissimo {
+  id              String       @id @default(cuid())
+  puntoVenditaId  String       @unique
+  puntoVendita    PuntoVendita @relation(fields: [puntoVenditaId], references: [id], onDelete: Cascade)
+  ultimoSync      DateTime     @default(now())
+  ultimiCount     Int          @default(0)
+  createdAt       DateTime     @default(now())
+
+  @@map("sync_velocissimo")
+}
+
+// Ultimo run del cron Velocissimo (cosa è successo: ok o errore)
+model CronVelocissimoLog {
+  id        String   @id @default(cuid())
+  runAt     DateTime @default(now())
+  status    String   // OK | ERROR
+  message   String?  // es. "12 incassi" o "timeout"
+  createdAt DateTime @default(now())
+
+  @@map("cron_velocissimo_log")
+}
+
+// Cache KPI dashboard Velocissimo per filtri (negozio/origine/tipo) e giorno
+model VelocissimoAnalyticsCache {
+  id          String   @id @default(cuid())
+  day         DateTime // giorno analizzato (00:00)
+  storeValue  String
+  storeText   String?
+  originsKey  String   @default("")
+  typesKey    String   @default("")
+  origins     Json?
+  types       Json?
+  metrics     Json     // Numero ordini, Totale venduto, ...
+  raw         Json?    // payload tecnico opzionale
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([day, storeValue, originsKey, typesKey], map: "velocissimo_cache_unique_key")
+  @@index([day, storeValue])
+  @@map("velocissimo_analytics_cache")
+}
+
+// ─── Fornitore ─────────────────────────────────────────────────
+model Fornitore {
+  id        String   @id @default(cuid())
+  nome      String
+  email     String?
+  telefono  String?
+  whatsapp  String?
+  indirizzo String?
+  note      String?
+  attivo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fatture   FatturaFornitore[]
+  ordini    OrdineFornitore[]
+  prodotti  Prodotto[]
+
+  @@map("fornitori")
+}
+
+// ─── Fattura Fornitore ─────────────────────────────────────────
+model FatturaFornitore {
+  id          String    @id @default(cuid())
+  numero      String
+  data        DateTime
+  importo     Float
+  pagata      Boolean   @default(false)
+  note        String?
+  createdAt   DateTime  @default(now())
+
+  fornitoreId String
+  fornitore   Fornitore @relation(fields: [fornitoreId], references: [id], onDelete: Cascade)
+
+  @@map("fatture_fornitori")
+}
+
+// ─── Ordine Fornitore ──────────────────────────────────────────
+enum StatoOrdine {
+  BOZZA
+  INVIATO
+  CONFERMATO
+  RICEVUTO
+  ANNULLATO
+}
+
+model OrdineFornitore {
+  id             String       @id @default(cuid())
+  numero         String       @default("")
+  data           DateTime     @default(now())
+  stato          StatoOrdine  @default(BOZZA)
+  note           String?
+  totale         Float        @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  fornitoreId    String
+  puntoVenditaId String
+  fornitore      Fornitore    @relation(fields: [fornitoreId], references: [id], onDelete: Cascade)
+  puntoVendita   PuntoVendita @relation(fields: [puntoVenditaId], references: [id], onDelete: Cascade)
+  items          OrdineItem[]
+
+  @@map("ordini_fornitori")
+}
+
+model OrdineItem {
+  id             String          @id @default(cuid())
+  quantita       Float
+  prezzoUnitario Float           @default(0)
+
+  ordineId       String
+  prodottoId     String
+  ordine         OrdineFornitore @relation(fields: [ordineId], references: [id], onDelete: Cascade)
+  prodotto       Prodotto        @relation(fields: [prodottoId], references: [id], onDelete: Cascade)
+
+  @@map("ordine_items")
+}
+
+// ─── Bolla Trasferimento tra sedi ──────────────────────────────
+enum StatoBolla {
+  BOZZA
+  INVIATA
+  RICEVUTA
+  ANNULLATA
+}
+
+model BollaTrasferimento {
+  id                   String       @id @default(cuid())
+  numero               String       @default("")
+  data                 DateTime     @default(now())
+  stato                StatoBolla   @default(BOZZA)
+  note                 String?
+  createdAt            DateTime     @default(now())
+
+  puntoVenditaOrigineId      String
+  puntoVenditaDestinazioneId String
+  puntoVenditaOrigine        PuntoVendita @relation("BollaOrigine", fields: [puntoVenditaOrigineId], references: [id])
+  puntoVenditaDestinazione   PuntoVendita @relation("BollaDestinazione", fields: [puntoVenditaDestinazioneId], references: [id])
+  items                      BollaItem[]
+
+  @@map("bolle_trasferimento")
+}
+
+model BollaItem {
+  id        String             @id @default(cuid())
+  quantita  Float
+
+  bollaId   String
+  prodottoId String
+  bolla     BollaTrasferimento @relation(fields: [bollaId], references: [id], onDelete: Cascade)
+  prodotto  Prodotto           @relation(fields: [prodottoId], references: [id], onDelete: Cascade)
+
+  @@map("bolla_items")
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ─── HACCP ────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+
+// ─── 1. Rintracciabilità (Carico-Scarico / Inizio-Fine) ──────
+model HaccpRintracciabilita {
+  id                 String       @id @default(cuid())
+  data               DateTime
+  fornitore          String
+  prodotto           String
+  ddtNumero          String?
+  accettato          Boolean      @default(true)
+  responsabile       String?
+  dataInizioUtilizzo DateTime?
+  dataFineUtilizzo   DateTime?
+  firma              String?
+  note               String?
+  createdAt          DateTime     @default(now())
+
+  puntoVenditaId     String
+  puntoVendita       PuntoVendita @relation(fields: [puntoVenditaId], references: [id], onDelete: Cascade)
+
+  @@map("haccp_rintracciabilita")
+}
+
+// ─── 2. Temperature Frigoriferi/Congelatori ───────────────────
+model HaccpTemperatura {
+  id             String       @id @default(cuid())
+  anno           Int
+  mese           Int
+  giorno         Int
+  cella1         Float?
+  cella2         Float?
+  cella3         Float?
+  cella4         Float?
+  cella5         Float?
+  cella6         Float?
+  cella7         Float?
+  cella8         Float?
+  cella9         Float?
+  cella10        Float?
+  firma          String?
+  createdAt      DateTime     @default(now())
+
+  puntoVenditaId String
+  puntoVendita   PuntoVendita @relation(fields: [puntoVenditaId], references: [id], onDelete: Cascade)
+
+  @@unique([anno, mese, giorno, puntoVenditaId])
+  @@map("haccp_temperature")
+}
+
+// ─── 3. Organigramma e Scadenze Attestati ─────────────────────
+model HaccpPersonale {
+  id                 String    @id @default(cuid())
+  nomeCognome        String
+  mansione           String?
+  rischio            String?
+  scadenzaAttestato  DateTime?
+  attivo             Boolean   @default(true)
+  note               String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  igieneRecords      HaccpIgiene[]
+
+  @@map("haccp_personale")
+}
+
+// ─── 4. Elenco Fornitori HACCP ────────────────────────────────
+// Usa il modello Fornitore esistente + vista HACCP dedicata
+
+// ─── 5. Igiene del Personale ──────────────────────────────────
+model HaccpIgiene {
+  id                 String         @id @default(cuid())
+  anno               Int
+  mese               Int
+  giorno             Int
+  lavMani            Boolean?
+  puliziaIndumenti   Boolean?
+  firma              String?
+  createdAt          DateTime       @default(now())
+
+  personaleId        String
+  personale          HaccpPersonale @relation(fields: [personaleId], references: [id], onDelete: Cascade)
+  puntoVenditaId     String
+  puntoVendita       PuntoVendita   @relation(fields: [puntoVenditaId], references: [id], onDelete: Cascade)
+
+  @@unique([anno, mese, giorno, personaleId, puntoVenditaId])
+  @@map("haccp_igiene")
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ─── ISPEZIONE PULIZIA - Direttore di Produzione ─────────────
+// ═══════════════════════════════════════════════════════════════
+model IspezionePulizia {
+  id                 String       @id @default(cuid())
+  data               DateTime
+  settimana          Int                        // numero settimana (1-52)
+  anno               Int
+
+  // Aree di valutazione (1-5)
+  cucina             Int          @default(0)   // Cucina e zona cottura
+  preparazione       Int          @default(0)   // Area preparazione panini
+  sala               Int          @default(0)   // Sala clienti / bancone
+  bagni              Int          @default(0)   // Servizi igienici
+  magazzino          Int          @default(0)   // Magazzino e stoccaggio
+  frigoriferi        Int          @default(0)   // Frigoriferi e congelatori
+  attrezzature       Int          @default(0)   // Attrezzature e utensili
+  esterno            Int          @default(0)   // Esterno e ingresso
+  smaltimentoRifiuti Int          @default(0)   // Gestione rifiuti
+  spogliatoi         Int          @default(0)   // Spogliatoi personale
+
+  // Metadata
+  mediaGenerale      Float        @default(0)
+  ispettore          String                     // Nome direttore/ispettore
+  firma              String?
+  noteGenerali       String?
+  noteCucina         String?
+  notePreparazione   String?
+  noteSala           String?
+  noteBagni          String?
+  noteMagazzino      String?
+  noteFrigoriferi    String?
+  noteAttrezzature   String?
+  noteEsterno        String?
+  noteRifiuti        String?
+  noteSpogliatoi     String?
+  azioniCorrettive   String?                    // Azioni correttive richieste
+  createdAt          DateTime     @default(now())
+
+  puntoVenditaId     String
+  puntoVendita       PuntoVendita @relation(fields: [puntoVenditaId], references: [id], onDelete: Cascade)
+
+  @@unique([anno, settimana, puntoVenditaId])
+  @@map("ispezioni_pulizia")
 }

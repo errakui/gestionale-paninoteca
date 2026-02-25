@@ -22,12 +22,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Script scraping / GitHub Actions: API con chiave (senza cookie)
-  const apiKey = request.headers.get("x-api-key");
-  if (apiKey && apiKey === process.env.INCASSI_API_KEY) {
-    if (pathname === "/api/incassi" && request.method === "POST") return NextResponse.next();
-    if (pathname === "/api/velocissimo/punto-vendita" && request.method === "GET") return NextResponse.next();
-  }
+  // Script scraping / GitHub Actions: bypass middleware auth.
+  // La validazione chiave viene fatta direttamente nelle route API.
+  if (pathname === "/api/incassi" && request.method === "POST") return NextResponse.next();
+  if (pathname === "/api/velocissimo/punto-vendita" && request.method === "GET") return NextResponse.next();
+  if (pathname === "/api/velocissimo/analytics-cache" && request.method === "POST") return NextResponse.next();
 
   // Cron Vercel: sync Velocissimo (controllo segreto nella route)
   if (pathname === "/api/cron/sync-velocissimo") {

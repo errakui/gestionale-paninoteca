@@ -24,12 +24,24 @@ interface CronLog {
   message: string | null;
 }
 
+interface AnalyticsRow {
+  id: string;
+  day: string;
+  storeValue?: string;
+  storeText: string | null;
+  origins: string[] | null;
+  types: string[] | null;
+  metrics: Record<string, { current: string | null; previous: string | null; delta: string | null; sign: string | null }>;
+  updatedAt: string;
+}
+
 export default function VelocissimoPage() {
   const [syncs, setSyncs] = useState<SyncItem[]>([]);
   const [cronLog, setCronLog] = useState<CronLog | null>(null);
   const [loading, setLoading] = useState(true);
   const [testRun, setTestRun] = useState<{ ok: boolean; message: string; steps?: { step: string; ok: boolean; detail?: string; screenshot?: string }[] } | null>(null);
   const [testLoading, setTestLoading] = useState(false);
+  const [analyticsRows, setAnalyticsRows] = useState<AnalyticsRow[]>([]);
 
   useEffect(() => {
     fetch("/api/velocissimo/sync")
@@ -46,6 +58,13 @@ export default function VelocissimoPage() {
       .catch(() => setCronLog(null));
   }, []);
 
+  useEffect(() => {
+    fetch("/api/velocissimo/analytics-cache?limit=6")
+      .then((r) => r.json())
+      .then((d) => setAnalyticsRows(Array.isArray(d) ? d : []))
+      .catch(() => setAnalyticsRows([]));
+  }, []);
+
   const runSyncNow = async () => {
     setTestRun(null);
     setTestLoading(true);
@@ -59,7 +78,11 @@ export default function VelocissimoPage() {
       if (r.ok && !data.useGitHubActions) {
         setTestRun({
           ok: true,
-          message: data.count !== undefined ? `${data.count} incassi caricati` : (data.message || "Ok"),
+          message: data.queued
+            ? (data.message || "Workflow GitHub avviato")
+            : data.count !== undefined
+              ? `${data.count} incassi caricati`
+              : (data.message || "Ok"),
           steps,
         });
         fetch("/api/velocissimo/cron-log").then((x) => x.json()).then(setCronLog).catch(() => {});
@@ -67,7 +90,7 @@ export default function VelocissimoPage() {
       } else if (data.useGitHubActions) {
         setTestRun({
           ok: false,
-          message: "Su Vercel Chrome non è disponibile. Usa GitHub Actions (vedi sotto).",
+          message: data.message || "Su Vercel Chrome non è disponibile. Usa GitHub Actions (vedi sotto).",
           steps,
         });
       } else {
@@ -95,7 +118,7 @@ export default function VelocissimoPage() {
 
       <PageHeader
         title="Velocissimo – Incassi"
-        description="Tutto su Vercel: cron ogni 6 minuti fa login su admin.velocissimo.app, seleziona Sorrento e carica gli incassi qui."
+        description="Lo scraping gira su GitHub Actions ogni 6 minuti e salva i dati nel DB del tuo progetto Vercel."
         action={
           <button
             onClick={runSyncNow}
@@ -116,7 +139,7 @@ export default function VelocissimoPage() {
             <div>
               <h3 className="font-semibold text-stone-900">Stato</h3>
               <p className="text-sm text-stone-500">
-                Portale: admin.velocissimo.app · Sede: Sorrento
+                Portale: admin.velocissimo.app · Negozio: configurabile (Globale / singolo store)
               </p>
             </div>
             {hasSync ? (
@@ -177,7 +200,7 @@ export default function VelocissimoPage() {
               <p className={`mt-1 text-sm font-medium ${testRun.ok ? "text-green-700" : "text-red-700"}`}>{testRun.message}</p>
               {testRun.steps && testRun.steps.length > 0 && (
                 <div className="mt-4 border-t border-stone-200 pt-3">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Passaggi eseguiti + cosa vede Chrome (screenshot)</p>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Passaggi eseguiti</p>
                   <ol className="list-decimal space-y-4 pl-5 text-sm">
                     {testRun.steps.map((s, i) => (
                       <li key={i} className={s.ok ? "text-stone-700" : "text-red-700 font-medium"}>
@@ -215,6 +238,30 @@ export default function VelocissimoPage() {
                   <span className="text-red-700">{cronLog.message ?? "Errore"}</span>
                 )}
               </p>
+            </div>
+          )}
+
+          {analyticsRows.length > 0 && (
+            <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <p className="text-sm font-medium text-blue-900">KPI dashboard salvati nel DB (oggi/ieri)</p>
+              <div className="mt-3 space-y-3">
+                {analyticsRows.slice(0, 2).map((row) => (
+                  <div key={row.id} className="rounded border border-blue-100 bg-white p-3">
+                    <p className="text-xs text-stone-600">
+                      Giorno: <strong>{new Date(row.day).toLocaleDateString("it-IT")}</strong> · Negozio: <strong>{row.storeText ?? row.storeValue ?? "N/D"}</strong> · Aggiornato: {new Date(row.updatedAt).toLocaleString("it-IT")}
+                    </p>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {["Numero ordini", "Totale venduto", "Scontrino medio", "Margine assoluto", "Coperti", "Coperto medio"].map((k) => (
+                        <div key={k} className="rounded border border-stone-100 p-2">
+                          <p className="text-xs text-stone-500">{k}</p>
+                          <p className="text-sm font-semibold text-stone-900">{row.metrics?.[k]?.current ?? "N/D"}</p>
+                          <p className="text-xs text-stone-500">Prev: {row.metrics?.[k]?.previous ?? "N/D"} · Δ {row.metrics?.[k]?.sign ?? ""}{row.metrics?.[k]?.delta ?? "N/D"}%</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

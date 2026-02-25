@@ -116,4 +116,25 @@ async function scrapeIncassi() {
 | API (script custom) | Hai già dati in un altro sistema/DB    |
 | Scraping            | Solo se non c’è API né export          |
 
-Per qualsiasi integrazione (scraping incluso), il punto di ingresso dati nel gestionale è sempre **POST /api/incassi**.
+Per qualsiasi integrazione (scraping incluso), il punto di ingresso dati economici è sempre **POST /api/incassi**.
+
+## Cache KPI dashboard Velocissimo (oggi/ieri)
+
+Per non riscrappare ad ogni apertura pagina, lo script headless può salvare una cache dei KPI filtrati.
+
+- **POST** `/api/velocissimo/analytics-cache` (header `x-api-key`)
+- Body minimo:
+  ```json
+  {
+    "day": "2026-02-25",
+    "storeValue": "-1",
+    "storeText": "--Globale--",
+    "origins": ["Tutte le origini"],
+    "types": ["Tutti i tipi"],
+    "metrics": {
+      "Numero ordini": { "current": "11", "previous": "16", "delta": "31.25", "sign": "-" },
+      "Totale venduto": { "current": "164.20", "previous": "234.70", "delta": "30.00", "sign": "-" }
+    }
+  }
+  ```
+- **GET** `/api/velocissimo/analytics-cache?limit=6` per leggere gli ultimi snapshot nel gestionale.

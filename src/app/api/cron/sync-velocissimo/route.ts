@@ -7,6 +7,34 @@ import { verifyToken } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+function cleanKey(v: string | null | undefined): string {
+  return (v || "").replace(/\\n/g, "").replace(/\\r/g, "").replace(/\r?\n/g, "").trim();
+}
+
+async function dispatchGitHubWorkflow() {
+  const token = cleanKey(process.env.GITHUB_SYNC_TOKEN);
+  const repo = process.env.GITHUB_SYNC_REPO || ""; // owner/repo
+  const workflow = process.env.GITHUB_SYNC_WORKFLOW || "sync-velocissimo.yml";
+  const ref = process.env.GITHUB_SYNC_REF || "main";
+  if (!token || !repo) {
+    return { ok: false, status: 500, error: "Mancano GITHUB_SYNC_TOKEN o GITHUB_SYNC_REPO" };
+  }
+  const res = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/${workflow}/dispatches`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+      "User-Agent": "gestionale-paninoteca-sync",
+    },
+    body: JSON.stringify({ ref }),
+  });
+  if (!res.ok) {
+    return { ok: false, status: res.status, error: await res.text() };
+  }
+  return { ok: true, status: res.status };
+}
+
 function parseData(testo: string | null): string | null {
   if (!testo || typeof testo !== "string") return null;
   const s = testo.trim();
@@ -27,7 +55,7 @@ export async function GET(req: NextRequest) {
   const secret = req.headers.get("x-cron-secret") || req.headers.get("authorization")?.replace("Bearer ", "");
   const cronOk = process.env.CRON_SECRET ? secret === process.env.CRON_SECRET : true;
   const token = req.cookies.get("auth-token")?.value;
-  const userOk = token && verifyToken(token);
+  const userOk = Boolean(token && verifyToken(token));
   if (!cronOk && !userOk) {
     return NextResponse.json({ error: "Non autorizzato (cron secret o login richiesto)" }, { status: 401 });
   }
@@ -72,8 +100,43 @@ export async function GET(req: NextRequest) {
 
   const isVercel = !!process.env.VERCEL;
 
-  // Su Vercel Chrome non può girare: mancano libnss3/libnspr4. Lo sync va fatto da GitHub Actions.
+  // Su Vercel Chrome non può girare: mancano libnss3/libnspr4.
+  // Se chiamata manuale da utente loggato, proviamo a lanciare direttamente il workflow GitHub.
   if (isVercel) {
+    if (userOk) {
+      add("Trigger workflow GitHub Actions", true, "Invio richiesta di esecuzione...");
+      const gh = await dispatchGitHubWorkflow();
+      if (!gh.ok) {
+        add("Trigger workflow GitHub Actions", false, gh.error);
+        await prisma.cronVelocissimoLog.create({
+          data: { status: "ERROR", message: `Trigger GitHub fallito: ${gh.status}` },
+        }).catch(() => {});
+        return NextResponse.json(
+          {
+            ok: false,
+            message:
+              "Non riesco ad avviare GitHub Actions da Vercel. Configura GITHUB_SYNC_TOKEN e GITHUB_SYNC_REPO su Vercel.",
+            steps,
+            useGitHubActions: true,
+          },
+          { status: 500 }
+        );
+      }
+      add("Workflow GitHub avviato", true, "Controlla tab Actions: il run parte in pochi secondi.");
+      await prisma.cronVelocissimoLog.create({
+        data: { status: "OK", message: "Workflow GitHub avviato da pulsante" },
+      }).catch(() => {});
+      return NextResponse.json(
+        {
+          ok: true,
+          queued: true,
+          message: "Workflow GitHub avviato. Lo scraping gira in cloud e aggiorna il DB.",
+          steps,
+        },
+        { status: 200 }
+      );
+    }
+
     add(
       "Sync su Vercel",
       false,

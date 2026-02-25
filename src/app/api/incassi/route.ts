@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
+function cleanKey(v: string | null | undefined): string {
+  return (v || "").replace(/\\n/g, "").replace(/\\r/g, "").replace(/\r?\n/g, "").trim();
+}
+
 export async function GET(req: NextRequest) {
   const pvId = req.nextUrl.searchParams.get("puntoVenditaId");
   const from = req.nextUrl.searchParams.get("from");
@@ -28,6 +32,14 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const apiKey = cleanKey(req.headers.get("x-api-key"));
+  const expected = cleanKey(process.env.INCASSI_API_KEY);
+  const hasUserSession = Boolean(req.cookies.get("auth-token")?.value);
+  const isApiKeyValid = Boolean(apiKey && expected && apiKey === expected);
+  if (!isApiKeyValid && !hasUserSession) {
+    return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
+  }
+
   const body = await req.json();
 
   // Import multiplo da array (usabile da script scraping o da UI)
