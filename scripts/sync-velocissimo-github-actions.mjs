@@ -339,6 +339,25 @@ async function main() {
     await new Promise((r) => setTimeout(r, 2500));
     if (DEBUG) await dumpPageContext(page, "dashboard-after-filters");
 
+    const availableStores = (selectedStore?.available || []).filter((o) => o?.value && o.value !== "Negozio");
+    const setStoreAndRefresh = async (value) => {
+      await page.evaluate((storeValue) => {
+        const select = Array.from(document.querySelectorAll("select")).find((s) =>
+          Array.from(s.querySelectorAll("option")).some((o) => (o.textContent || "").toLowerCase().includes("globale"))
+        );
+        if (!select) return;
+        select.value = storeValue;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      }, value);
+      await page.evaluate(() => {
+        const btn = Array.from(document.querySelectorAll("button, a")).find((b) =>
+          (b.textContent || "").trim().toLowerCase().includes("aggiorna")
+        );
+        if (btn) btn.click();
+      });
+      await new Promise((r) => setTimeout(r, 1600));
+    };
+
     // Salva KPI dashboard nel DB (oggi + ieri) con i filtri correnti
     if (!EXPLORE_FILTERS && !ANALYZE_DASHBOARD) {
       const technicalFilters = {
@@ -369,66 +388,70 @@ async function main() {
 
       const today = dayStrings(0);
       const yesterday = dayStrings(-1);
-      const metricsToday = await fetchMetricsByDay(today);
-      const metricsYesterday = await fetchMetricsByDay(yesterday);
-      metricsTodayForFallback = metricsToday;
-
       const selectedOrigins = ORIGINE_TEXT ? [ORIGINE_TEXT] : ["Tutte le origini"];
       const selectedTypes = TIPO_TEXT ? [TIPO_TEXT] : ["Tutti i tipi"];
-      const storeText = selectedStore?.text || "--Globale--";
-      const storeValue = selectedStore?.value || STORE_VALUE;
+      const storesToScan = availableStores.length > 0 ? availableStores : [{ value: STORE_VALUE, text: selectedStore?.text || "--Globale--" }];
+      for (const store of storesToScan) {
+        await setStoreAndRefresh(store.value);
+        const metricsToday = await fetchMetricsByDay(today);
+        const metricsYesterday = await fetchMetricsByDay(yesterday);
+        if (store.value === STORE_VALUE) metricsTodayForFallback = metricsToday;
 
-      const payloads = [
-        { day: today.date, metrics: metricsToday },
-        { day: yesterday.date, metrics: metricsYesterday },
-      ];
-      for (const p of payloads) {
-        const save = await saveAnalyticsSnapshot(
-          p.day,
-          storeValue,
-          storeText,
-          selectedOrigins,
-          selectedTypes,
-          p.metrics,
-          technicalFilters
-        );
-        if (!save.ok) {
-          log(`Salvataggio analytics cache ${p.day} fallito:`, save.status, save.body);
-        } else {
-          log(`Analytics cache salvata per ${p.day}`);
+        const payloads = [
+          { day: today.date, metrics: metricsToday },
+          { day: yesterday.date, metrics: metricsYesterday },
+        ];
+        for (const p of payloads) {
+          const save = await saveAnalyticsSnapshot(
+            p.day,
+            store.value,
+            store.text || store.value,
+            selectedOrigins,
+            selectedTypes,
+            p.metrics,
+            technicalFilters
+          );
+          if (!save.ok) {
+            log(`Salvataggio analytics cache ${p.day} [${store.text}] fallito:`, save.status, save.body);
+          } else {
+            log(`Analytics cache salvata per ${p.day} [${store.text}]`);
+          }
         }
       }
 
       // Backfill storico (es. febbraio): salva KPI giorno per giorno e opzionalmente incasso.
       if (BACKFILL_FROM && BACKFILL_TO) {
         const days = enumerateDays(BACKFILL_FROM, BACKFILL_TO);
-        log(`BACKFILL attivo: ${BACKFILL_FROM} -> ${BACKFILL_TO} (${days.length} giorni)`);
+        log(`BACKFILL attivo: ${BACKFILL_FROM} -> ${BACKFILL_TO} (${days.length} giorni, ${storesToScan.length} store)`);
         const incassiBackfill = [];
-        for (const day of days) {
-          const metrics = await fetchMetricsByDay(day);
-          const save = await saveAnalyticsSnapshot(
-            day.date,
-            storeValue,
-            storeText,
-            selectedOrigins,
-            selectedTypes,
-            metrics,
-            technicalFilters
-          );
-          if (!save.ok) {
-            log(`Backfill analytics ${day.date} fallito:`, save.status, save.body);
-          } else {
-            log(`Backfill analytics ok: ${day.date}`);
-          }
+        for (const store of storesToScan) {
+          await setStoreAndRefresh(store.value);
+          for (const day of days) {
+            const metrics = await fetchMetricsByDay(day);
+            const save = await saveAnalyticsSnapshot(
+              day.date,
+              store.value,
+              store.text || store.value,
+              selectedOrigins,
+              selectedTypes,
+              metrics,
+              technicalFilters
+            );
+            if (!save.ok) {
+              log(`Backfill analytics ${day.date} [${store.text}] fallito:`, save.status, save.body);
+            } else {
+              log(`Backfill analytics ok: ${day.date} [${store.text}]`);
+            }
 
-          const venduto = parseMetricToAmount(metrics?.["Totale venduto"]?.current);
-          if (!isNaN(venduto) && venduto > 0 && puntoVenditaId) {
-            incassiBackfill.push({
-              data: day.date,
-              importo: venduto,
-              puntoVenditaId,
-              note: "Backfill da KPI Totale venduto",
-            });
+            const venduto = parseMetricToAmount(metrics?.["Totale venduto"]?.current);
+            if (store.value === STORE_VALUE && !isNaN(venduto) && venduto > 0 && puntoVenditaId) {
+              incassiBackfill.push({
+                data: day.date,
+                importo: venduto,
+                puntoVenditaId,
+                note: "Backfill da KPI Totale venduto",
+              });
+            }
           }
         }
 

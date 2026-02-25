@@ -47,6 +47,7 @@ const DEFAULT_VELOCISSIMO_STORES = [
   { value: "1", label: "PIANO DI SORRENTO" },
   { value: "5", label: "SORRENTO" },
 ];
+type SelectOption = { value: string; label: string };
 
 export default function IncassiPage() {
   const [pvList, setPvList] = useState<PuntoVendita[]>([]);
@@ -55,7 +56,7 @@ export default function IncassiPage() {
   const [to, setTo] = useState("");
   const [incassi, setIncassi] = useState<Incasso[]>([]);
   const [analyticsRows, setAnalyticsRows] = useState<AnalyticsRow[]>([]);
-  const [storeValueSel, setStoreValueSel] = useState("-1");
+  const [storeValueSel, setStoreValueSel] = useState("");
   const [originsKeySel, setOriginsKeySel] = useState("");
   const [typesKeySel, setTypesKeySel] = useState("");
   const [loading, setLoading] = useState(true);
@@ -64,7 +65,7 @@ export default function IncassiPage() {
   const [testLoading, setTestLoading] = useState(false);
   const [draftFrom, setDraftFrom] = useState("");
   const [draftTo, setDraftTo] = useState("");
-  const [draftStore, setDraftStore] = useState("-1");
+  const [draftStore, setDraftStore] = useState("");
   const [draftOrigins, setDraftOrigins] = useState("");
   const [draftTypes, setDraftTypes] = useState("");
 
@@ -106,7 +107,6 @@ export default function IncassiPage() {
       .then((r) => r.json())
       .then((d) => {
         setPvList(d);
-        if (d.length > 0 && !pvSel) setPvSel(d[0].id);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -155,10 +155,22 @@ export default function IncassiPage() {
     perMese[k] = (perMese[k] || 0) + i.importo;
   });
   const latestAnalytics = analyticsRows[0];
+  const latestAnalyticsDay = latestAnalytics ? new Date(latestAnalytics.day).toISOString().slice(0, 10) : null;
+  const latestPerStore = latestAnalyticsDay
+    ? Array.from(
+        new Map(
+          analyticsRows
+            .filter((r) => new Date(r.day).toISOString().slice(0, 10) === latestAnalyticsDay)
+            .map((r) => [r.storeValue, r])
+        ).values()
+      )
+    : [];
   const storeOptions = Array.from(
-    new Map([
-      ...DEFAULT_VELOCISSIMO_STORES.map((s) => [s.value, s]),
-      ...analyticsRows.map((r) => [r.storeValue, { value: r.storeValue, label: r.storeText || r.storeValue }]),
+    new Map<string, SelectOption>([
+      ...DEFAULT_VELOCISSIMO_STORES.map((s): [string, SelectOption] => [s.value, s]),
+      ...analyticsRows.map(
+        (r): [string, SelectOption] => [r.storeValue, { value: r.storeValue, label: r.storeText || r.storeValue }]
+      ),
     ]).values()
   );
   const originOptions = Array.from(
@@ -190,6 +202,10 @@ export default function IncassiPage() {
     setOriginsKeySel("");
     setTypesKeySel("");
   };
+  const quickFebruary = () => {
+    setDraftFrom("2026-02-01");
+    setDraftTo("2026-02-24");
+  };
 
   return (
     <>
@@ -213,7 +229,7 @@ export default function IncassiPage() {
           value={pvSel}
           onChange={(e) => setPvSel(e.target.value)}
         >
-          <option value="">Punto vendita interno (tutti)</option>
+          <option value="">Destinazione DB interna: tutte le sedi</option>
           {pvList.map((pv) => (
             <option key={pv.id} value={pv.id}>
               {pv.nome}
@@ -275,6 +291,12 @@ export default function IncassiPage() {
           Cerca
         </button>
         <button
+          onClick={quickFebruary}
+          className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100"
+        >
+          Febbraio
+        </button>
+        <button
           onClick={resetFilters}
           className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
         >
@@ -282,7 +304,7 @@ export default function IncassiPage() {
         </button>
       </div>
       <p className="mb-4 text-sm text-stone-500">
-        Il filtro Negozio/Origine/Tipo usa i valori reali Velocissimo. Il punto vendita interno indica dove salvi i record nel gestionale.
+        Negozio/Origine/Tipo sono filtri reali Velocissimo. Se non vedi righe, metti "Destinazione DB interna: tutte le sedi" e poi premi Cerca.
       </p>
 
       {testRun && (
@@ -334,20 +356,18 @@ export default function IncassiPage() {
         </div>
       ) : (
         <>
-          {latestAnalytics && (
+          {latestPerStore.length > 0 && (
             <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4">
               <p className="text-sm font-semibold text-blue-900">
-                KPI dashboard (snapshot più recente): {new Date(latestAnalytics.day).toLocaleDateString("it-IT")} · {latestAnalytics.storeText || latestAnalytics.storeValue}
+                KPI dashboard (ultimo giorno disponibile: {new Date(latestPerStore[0].day).toLocaleDateString("it-IT")}) per tutti i negozi
               </p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {KPI_ORDER.map((k) => (
-                  <div key={k} className="rounded-lg border border-blue-100 bg-white p-3">
-                    <p className="text-xs text-stone-500">{k}</p>
-                    <p className="text-lg font-bold text-stone-900">{latestAnalytics.metrics?.[k]?.current ?? "N/D"}</p>
-                    <p className="text-xs text-stone-500">
-                      Prev: {latestAnalytics.metrics?.[k]?.previous ?? "N/D"} · Δ {latestAnalytics.metrics?.[k]?.sign ?? ""}
-                      {latestAnalytics.metrics?.[k]?.delta ?? "N/D"}%
-                    </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {latestPerStore.map((row) => (
+                  <div key={row.id} className="rounded-lg border border-blue-100 bg-white p-3">
+                    <p className="text-sm font-semibold text-stone-900">{row.storeText || row.storeValue}</p>
+                    <p className="mt-1 text-xs text-stone-500">Totale venduto</p>
+                    <p className="text-lg font-bold text-stone-900">{row.metrics?.["Totale venduto"]?.current ?? "N/D"}</p>
+                    <p className="text-xs text-stone-500">Ordini: {row.metrics?.["Numero ordini"]?.current ?? "N/D"}</p>
                   </div>
                 ))}
               </div>
